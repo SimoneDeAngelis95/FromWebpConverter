@@ -1,3 +1,5 @@
 __pycache__
 __venv__
 .DS_Store
+build
+dist

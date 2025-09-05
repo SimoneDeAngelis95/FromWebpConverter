@@ -13,15 +13,17 @@ class MainWindow():
 
     def __init__(self):
         self.window = tk.Tk()
-        self.window.title("From Webp Converter")
+        self.window.title("From Webp Converter V1.0.1")
         self.window.resizable(False, False)
         self.PrintWindowInTheCenter()
         
+        """
         try:
-            self.window.iconphoto(True, tk.Image("photo", file="icon.png"))
+            self.window.iconphoto(True, tk.Image("photo", file="../assets/icon.icns"))  # tkinter only supports .ico and .png files for icons, icon will be set in the app bundle using py2app
         except:
             pass
-
+        """
+            
         self.listBox = MyListBox(self.window)
         self.listScrollbarY = tk.Scrollbar(self.window)
         self.listScrollbarX = tk.Scrollbar(self.window,orient='horizontal')
@@ -100,7 +102,6 @@ class MainWindow():
             T.Thread(target=self.ConversionThread).start()
 
     def ConversionThread(self):
-        
         counter = 0
         self.statusBar.config(fg="black")
         

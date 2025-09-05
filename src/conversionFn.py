@@ -13,7 +13,7 @@ def convertFile(image, pathToSave):
         img.save(name, format='PNG', lossless=True)
     else:
         name = name + ".jpg"
-        img.save(name, format='JPEG', quality=95) # la documentazione consiglia di usare 95 per avere una riproduzione errata dell'originale, è comunque la qualità massima disponibile. Se metti 100 ai qualche problema di sgranatura, leggi la documentazione
+        img.save(name, format='JPEG', quality=95) # la documentazione consiglia di usare 95 per avere una riproduzione esatta dell'originale, è comunque la qualità massima disponibile. Se metti 100 hai qualche problema di sgranatura, leggi la documentazione
         
     img.close()
 
