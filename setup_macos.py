@@ -9,10 +9,6 @@ This script is used to package a Python application into a macOS app bundle usin
 This setup works with macOS silicon and intel architectures.
 """
 
-"""
-TODO: py2ap non riesce a firmare l'app perchè le liberire tkinter sono librerie esterne.
-"""
-
 from setuptools import setup
 
 
@@ -27,13 +23,21 @@ OPTIONS = {
         'CFBundleName': "From Webp Converter",
         'CFBundleVersion': "V1.0.1",
         'CFBundleShortVersionString': "V1.0.1", 
-        'CFBundleExecutable': "From Webp Converter",
         'NSHumanReadableCopyright': '© 2023-2025 Made with Love by Simone De Angelis',
         'CFBundleIdentifier': 'com.simonedeamelis.fromwebpconverter',                  # Unique identifier for the app
         'LSApplicationCategoryType': 'public.app-category.utilities',                  # Application category
         'NSHighResolutionCapable': True,                                               # Support for high-resolution displays
     },
     'optimize': 2,                                                                     # Python bytecode optimization level
+    # Ensure Qt and PIL modules are collected
+    'packages': ['PIL', 'PyQt6'],
+    'includes': [
+        'PyQt6',
+        'PyQt6.QtCore',
+        'PyQt6.QtGui',
+        'PyQt6.QtWidgets',
+        'PyQt6.sip',
+    ],
 }
 
 setup(
@@ -44,5 +48,5 @@ setup(
     description="From Webp Converter is a simple and fast tool to convert WebP images to PNG or JPEG format.",
     license="GPLv3",
     options={'py2app': OPTIONS},
-    setup_requires=['py2app'],
+    setup_requires=['py2app', 'PyQt6'],
 )

@@ -1,60 +1,72 @@
 from PIL import Image, ImageSequence
+import os
 
-def convertFile(image, pathToSave):
-    
-    img = Image.open(image)
-    name = pathToSave + "/" + extractFileName(image)
 
-    if isGif(image):
-        name = name + ".gif"
-        img.save(name, format='PNG', save_all=True, lossless=True) # se uso come formato PNG funziona tutto bene
-    elif hasAlphaChannel(image):
-        name = name + ".png"
-        img.save(name, format='PNG', lossless=True)
-    else:
-        name = name + ".jpg"
-        img.save(name, format='JPEG', quality=95) # la documentazione consiglia di usare 95 per avere una riproduzione esatta dell'originale, è comunque la qualità massima disponibile. Se metti 100 hai qualche problema di sgranatura, leggi la documentazione
-        
-    img.close()
+def convertFile(image_path, pathToSave):
+    """Convert a .webp image to GIF (if animated), PNG (if has alpha), or JPG otherwise."""
+    img = Image.open(image_path)
+    name = os.path.join(pathToSave, extractFileName(image_path))
 
-def isGif(filePath):
     try:
-        MediaFile = Image.open(filePath)
-        Index = 0
-        
-        for Frame in ImageSequence.Iterator(MediaFile): # conto i frame del file
-            Index += 1
-        
-        if Index > 1:               # se ha più di un frame è una gif
-            return True
-        else:                       # se ha un solo frame è una semplice foto
-            return False
-    except:                         # se non è ne l'uno ne l'altra genera un errore
+        if isGif(img):
+            name = name + ".gif"
+            _save_as_gif(img, name)
+        elif hasAlphaChannel(img):
+            name = name + ".png"
+            img.save(name, format='PNG', lossless=True)
+        else:
+            name = name + ".jpg"
+            img.save(name, format='JPEG', quality=95)
+    finally:
+        img.close()
+
+
+def _save_as_gif(img, out_path):
+    """Save an animated image as GIF with frame durations preserved when possible."""
+    frames = []
+    durations = []
+
+    try:
+        for frame in ImageSequence.Iterator(img):
+            rgba = frame.convert('RGBA')
+            pal = rgba.convert('P', palette=Image.ADAPTIVE, colors=255)
+            frames.append(pal)
+            durations.append(frame.info.get('duration', img.info.get('duration', 100)))
+
+        base = frames[0]
+        append = frames[1:] if len(frames) > 1 else []
+        base.save(
+            out_path,
+            save_all=True,
+            append_images=append,
+            format='GIF',
+            loop=0,
+            duration=durations if durations else 100,
+            disposal=2,
+        )
+    except Exception:
+        # Fallback: save first frame only
+        img.convert('RGB').save(out_path, format='GIF')
+
+
+def isGif(img):
+    try:
+        return getattr(img, 'is_animated', False) or getattr(img, 'n_frames', 1) > 1
+    except Exception:
         return False
 
-def extractFileName(filePath):
-    name = ""
-    i = len(filePath) - 1
 
-    while i >= 0:
-        if filePath[i] == ".":
-            i = i - 1
-            while filePath[i] != "/" and i >= 0:
-                name = filePath[i] + name
-                i = i - 1
-            break
-        i = i - 1
+def extractFileName(filePath):
+    base = os.path.basename(filePath)
+    name, _ = os.path.splitext(base)
     return name
 
-def hasAlphaChannel(file):
-    img = Image.open(file)
-    
-    if img.info.get("transparency", None) is not None: # se nelle info dell'immagine c'è scritto che è presente la trasparenza
-        img.close()
-        return True
-    elif img.mode == "RGBA": # un pò grossolano ed approssimativo, si può migliorare
-        img.close()
-        return True
-    else:
-        img.close()
+
+def hasAlphaChannel(img):
+    """Return True if image has an alpha channel or transparency info."""
+    try:
+        if img.info.get("transparency", None) is not None:
+            return True
+        return img.mode in ("LA", "RGBA")
+    except Exception:
         return False

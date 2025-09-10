@@ -1,207 +1,290 @@
-import tkinter as tk
-from tkinter import ttk
-import tkinter.filedialog as fd
-from MyListBox import *
-from conversionFn import *
-import threading as T
-from tkinter import messagebox
 import os
-from os.path import exists
+import sys
 import platform
 
-class MainWindow():
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
+from PyQt6.QtGui import QIcon, QColor
+from PyQt6.QtWidgets import (
+    QMainWindow,
+    QWidget,
+    QFileDialog,
+    QListWidget,
+    QListWidgetItem,
+    QVBoxLayout,
+    QHBoxLayout,
+    QPushButton,
+    QLineEdit,
+    QProgressBar,
+    QStatusBar,
+)
+from conversionFn import convertFile
 
+
+class DropListWidget(QListWidget):
+    filesDropped = pyqtSignal(list)
+
+    def __init__(self, parent=None):
+        super().__init__(parent)
+        self.setAcceptDrops(True)
+
+    def dragEnterEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dragMoveEvent(self, event):
+        if event.mimeData().hasUrls():
+            event.acceptProposedAction()
+        else:
+            event.ignore()
+
+    def dropEvent(self, event):
+        if not event.mimeData().hasUrls():
+            event.ignore()
+            return
+        paths = [u.toLocalFile() for u in event.mimeData().urls()]
+        self.filesDropped.emit(paths)
+        event.acceptProposedAction()
+
+
+class ConverterWorker(QObject):
+    progress = pyqtSignal(int, int)  # current, total
+    item_status = pyqtSignal(int, str)  # index, status: 'pending'|'ok'|'error'
+    finished = pyqtSignal(int, int)  # success_count, total
+
+    def __init__(self, files, dest):
+        super().__init__()
+        self.files = files
+        self.dest = dest
+
+    def run(self):
+        ok = 0
+        total = len(self.files)
+        for i, path in enumerate(self.files):
+            try:
+                self.progress.emit(i + 1, total)
+                self.item_status.emit(i, 'pending')
+                convertFile(path, self.dest)
+                ok += 1
+                self.item_status.emit(i, 'ok')
+            except Exception:
+                self.item_status.emit(i, 'error')
+                # continue to next
+        self.finished.emit(ok, total)
+
+# ==============================================
+#                 MAIN WINDOW
+# ==============================================
+class MainWindow(QMainWindow):
     def __init__(self):
-        self.window = tk.Tk()
-        self.window.title("From Webp Converter V1.0.1")
-        self.window.resizable(False, False)
-        self.PrintWindowInTheCenter()
-        
-        """
-        try:
-            self.window.iconphoto(True, tk.Image("photo", file="../assets/icon.icns"))  # tkinter only supports .ico and .png files for icons, icon will be set in the app bundle using py2app
-        except:
-            pass
-        """
-            
-        self.listBox = MyListBox(self.window)
-        self.listScrollbarY = tk.Scrollbar(self.window)
-        self.listScrollbarX = tk.Scrollbar(self.window,orient='horizontal')
-        self.chooseFilesBtn = ttk.Button(self.window, text='Select Files', command=self.chooseFilesBtnDialogAction)
-        self.removeBtn = ttk.Button(self.window, text='Remove', command=self.removeFileFromListAction)
-        self.removeAllBtn = ttk.Button(self.window, text='Remove All', command=self.removeAllFileFromListAction)
-        self.convertBtn = ttk.Button(self.window, text='Convert', command=self.convertAction)
-        self.chooseDestinationEntryVar = tk.StringVar()
-        self.chooseDestinationEntry = ttk.Entry(textvariable=self.chooseDestinationEntryVar, state=tk.DISABLED, foreground="black")
-        self.chooseDestinationBtn = ttk.Button(self.window, text='Select Destination', command=self.chooseDestinationPathAction)
-        self.progressBar = ttk.Progressbar(self.window, orient='horizontal', mode='indeterminate', length=280)
-        self.statusBar = tk.Label(self.window, bd=1, relief=tk.GROOVE, text='from Webp Converter')
+        super().__init__()
+        self.setWindowTitle("From Webp Converter V1.0.1")
+        self.setMinimumSize(650, 340)
 
-        self.listBox.config(yscrollcommand = self.listScrollbarY.set)
-        self.listBox.config(xscrollcommand = self.listScrollbarX.set)
-        self.listScrollbarY.config(command = self.listBox.yview)
-        self.listScrollbarX.config(command = self.listBox.xview)
+        # Try set app icon if available (Qt uses .icns on macOS)
+        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'icon.icns')
+        if os.path.exists(icon_path):
+            self.setWindowIcon(QIcon(icon_path))
+
+        self._files = []
+        self._setup_ui()
+        self._setup_connections()
 
         # Default destination path
-        if platform.system() == 'Darwin' or platform.system() == 'Linux':
-            self.chooseDestinationEntryVar.set(os.path.join(os.path.join(os.path.expanduser('~')), 'Desktop'))
-        elif platform.system() == 'Windows':
-            self.chooseDestinationEntryVar.set(os.path.join(os.path.join(os.environ['USERPROFILE']), 'Desktop'))
+        self.dest_edit.setText(self._default_desktop())
+        self._update_controls(enable_essentials=False, enable_all=True)
 
-        self.setStateButtons(state="off", howMany="essentials")
+    def _setup_ui(self):
+        central = QWidget(self)
+        self.setCentralWidget(central)
 
-        self.fileList = []
+        self.select_btn = QPushButton('Select Files')
+        self.list_widget = DropListWidget()
 
-    # ~~~~~~~~ ACTIONS FUNCTIONS ~~~~~~~~
+        self.dest_edit = QLineEdit()
+        self.dest_edit.setReadOnly(True)
+        self.dest_btn = QPushButton('Select Destination')
 
-    def chooseFilesBtnDialogAction(self):
-        filetypes = (('webp files', '*.webp'), ('all files', '*.*'))
-        
-        appoList = fd.askopenfilenames(parent=self.window, title='Choose files', filetypes=filetypes)
+        self.remove_btn = QPushButton('Remove')
+        self.remove_all_btn = QPushButton('Remove All')
+        self.convert_btn = QPushButton('Convert')
 
-        if appoList:
-            appoList = self.removeAlreadySelectedFiles(appoList)
-            
-            for i in range(len(appoList)):
-                if(appoList[i].split(".")[1] != "webp"):
-                    appoList.pop(i)
-            
-            if appoList:
-                for i in range(len(appoList)):
-                    self.fileList.append(appoList[i])
-        
-                self.listBox.updateList(self.fileList)
-                self.setStateButtons(state="on", howMany="essentials")
+        self.progress = QProgressBar()
+        self.progress.setTextVisible(False)
+        self.progress.setRange(0, 1)
+        self.progress.setVisible(False)
 
-    def removeFileFromListAction(self):
-        if len(self.fileList) > 0 and self.listBox.getSelectedFile() != -1:
-            self.fileList.remove(self.listBox.getSelectedFile())
-            self.listBox.updateList(self.fileList)
-            if not self.fileList:
-                self.setStateButtons(state="off", howMany="essentials")
+        layout = QVBoxLayout()
+        layout.addWidget(self.select_btn)
+        layout.addWidget(self.list_widget)
 
-    def removeAllFileFromListAction(self):
-        if len(self.fileList) > 0:
-            self.fileList.clear()
-            self.listBox.updateList(self.fileList)
-            self.setStateButtons(state="off", howMany="essentials")
+        dest_row = QHBoxLayout()
+        dest_row.addWidget(self.dest_edit, stretch=2)
+        dest_row.addWidget(self.dest_btn, stretch=1)
+        layout.addLayout(dest_row)
 
-    def chooseDestinationPathAction(self):
-        pathBackup = self.chooseDestinationEntryVar.get()
-        self.chooseDestinationEntryVar.set(fd.askdirectory(initialdir=self.chooseDestinationEntryVar.get()))
-        
-        if self.chooseDestinationEntryVar.get() == "":      # if the user open the dialog but doesn't choose a folder
-            self.chooseDestinationEntryVar.set(pathBackup)
+        actions_row = QHBoxLayout()
+        actions_row.addWidget(self.remove_btn)
+        actions_row.addWidget(self.remove_all_btn)
+        actions_row.addWidget(self.convert_btn)
+        layout.addLayout(actions_row)
 
-    def convertAction(self):
-        if(len(self.fileList) > 0):
-            self.progressBar.grid(row=4, column=2, columnspan=1, sticky=(tk.W, tk.E))
-            self.progressBar.start()
-            self.setStateButtons(state="off", howMany="all")
-            
-            T.Thread(target=self.ConversionThread).start()
+        layout.addWidget(self.progress)
 
-    def ConversionThread(self):
-        counter = 0
-        self.statusBar.config(fg="black")
-        
-        for i in range(len(self.fileList)):
-            try:
-                answer = True
-                fileName = str(extractFileName(self.fileList[i]))
-                filePath = str(self.chooseDestinationEntryVar.get()) + "/" + str(fileName)
+        central.setLayout(layout)
 
-                if exists(filePath + ".jpg") or exists(filePath + ".jpeg") or exists(filePath + ".png") or exists(filePath + ".gif"):
-                    question = "A converted file of \"" + fileName + "\" could already exists here, proceed anyway?"
-                    answer = messagebox.askyesno(title="Watch out!", message=question)
+        status = QStatusBar(self)
+        self.setStatusBar(status)
+        self.statusBar().showMessage('From Webp Converter')
 
-                if answer == True:
-                    message = "Converting... " + str(counter + 1) + " / " + str(len(self.fileList))
-                    self.statusBar.config(text=message)
-                    self.listBox.itemconfig(i, {'bg': 'orange'})
-                    convertFile(self.fileList[i], self.chooseDestinationEntryVar.get())
-                    counter = counter + 1
-                    self.listBox.itemconfig(i, {'bg': 'green'})
-            except:
-                self.statusBar.config(text = "Error!")
-                self.listBox.itemconfig(i, {'bg': 'red'})
-        
-        self.statusBar.config(text = "Converted " + str(counter) + " / " + str(len(self.fileList)))
-        if counter == len(self.fileList):
-            self.statusBar.config(fg="green")
+    def _setup_connections(self):
+        self.select_btn.clicked.connect(self._select_files)
+        self.remove_btn.clicked.connect(self._remove_file)
+        self.remove_all_btn.clicked.connect(self._remove_all)
+        self.dest_btn.clicked.connect(self._select_dest)
+        self.convert_btn.clicked.connect(self._start_conversion)
+        self.list_widget.filesDropped.connect(self._on_files_dropped)
+
+    # UI actions
+    def _select_files(self):
+        files, _ = QFileDialog.getOpenFileNames(self, 'Choose files', self._default_desktop(),
+                                                'WebP files (*.webp);;All files (*.*)')
+        if not files:
+            return
+
+        # Filter: unique + only .webp (case-insensitive)
+        existing = set(self._files)
+        to_add = [f for f in files if f.lower().endswith('.webp') and f not in existing]
+        if not to_add:
+            return
+        self._files.extend(to_add)
+        self._refresh_list()
+        self._update_controls(enable_essentials=True)
+
+    def _remove_file(self):
+        row = self.list_widget.currentRow()
+        if row >= 0:
+            self._files.pop(row)
+            self.list_widget.takeItem(row)
+        if not self._files:
+            self._update_controls(enable_essentials=False)
+
+    def _remove_all(self):
+        if not self._files:
+            return
+        self._files.clear()
+        self.list_widget.clear()
+        self._update_controls(enable_essentials=False)
+
+    def _select_dest(self):
+        current = self.dest_edit.text() or self._default_desktop()
+        chosen = QFileDialog.getExistingDirectory(self, 'Select destination', current)
+        if chosen:
+            self.dest_edit.setText(chosen)
+
+    def _start_conversion(self):
+        if not self._files:
+            return
+        self._set_busy(True)
+        self.statusBar().setStyleSheet('color: black;')
+        self.statusBar().showMessage('Starting conversion...')
+
+        self.thread = QThread(self)
+        self.worker = ConverterWorker(self._files.copy(), self.dest_edit.text())
+        self.worker.moveToThread(self.thread)
+        self.thread.started.connect(self.worker.run)
+        self.worker.progress.connect(self._on_progress)
+        self.worker.item_status.connect(self._on_item_status)
+        self.worker.finished.connect(self._on_finished)
+        self.worker.finished.connect(self.thread.quit)
+        self.thread.finished.connect(self.thread.deleteLater)
+        self.thread.start()
+
+    def _on_files_dropped(self, paths: list[str]):
+        # Filter dropped files: unique + .webp only
+        existing = set(self._files)
+        to_add = []
+        for p in paths:
+            if not p:
+                continue
+            if os.path.isdir(p):
+                # Optionally, collect .webp from the folder
+                for root, _, files in os.walk(p):
+                    for f in files:
+                        full = os.path.join(root, f)
+                        if full.lower().endswith('.webp') and full not in existing:
+                            to_add.append(full)
+            else:
+                if p.lower().endswith('.webp') and p not in existing:
+                    to_add.append(p)
+        if not to_add:
+            return
+        self._files.extend(to_add)
+        self._refresh_list()
+        self._update_controls(enable_essentials=True)
+
+    # Worker callbacks
+    def _on_progress(self, current, total):
+        self.statusBar().showMessage(f'Converting... {current} / {total}')
+
+    def _on_item_status(self, index, status):
+        item = self.list_widget.item(index)
+        if not item:
+            return
+        if status == 'pending':
+            color = QColor('orange')
+        elif status == 'ok':
+            color = QColor('green')
         else:
-            self.statusBar.config(fg="red")
-        self.progressBar.stop()
-        self.progressBar.grid_remove()
-        self.fileList.clear()
-        self.listBox.updateList(self.fileList)
-        self.setStateButtons(state="on", howMany="all")
-        self.setStateButtons(state="off", howMany="essentials") # not so sophisticated, must be updated with automatic system
+            color = QColor('red')
+        item.setBackground(color)
 
-    # ~~~~~~~~ WINDOW FUNCTIONS ~~~~~~~~
+    def _on_finished(self, ok, total):
+        self.progress.setVisible(False)
+        self._set_busy(False)
+        self._files.clear()
+        self._refresh_list()
+        self._update_controls(enable_essentials=False)
 
-    def gridAll(self):
+        msg = f'Converted {ok} / {total}'
+        if ok == total:
+            self.statusBar().setStyleSheet('color: green;')
+        else:
+            self.statusBar().setStyleSheet('color: red;')
+        self.statusBar().showMessage(msg)
 
-        self.window.columnconfigure(0, weight=2)
-        self.window.columnconfigure(1, weight=2)
-        self.window.columnconfigure(2, weight=3)
+    # Helpers
+    def _refresh_list(self):
+        self.list_widget.clear()
+        for path in self._files:
+            item = QListWidgetItem(path)
+            self.list_widget.addItem(item)
 
-        self.chooseFilesBtn.grid(row=0, column=0, sticky=(tk.W, tk.E), pady=5, padx=(10, 0), columnspan=3)
-        self.listBox.grid(row=1, column=0, columnspan=3, sticky=(tk.W, tk.E), pady=(5, 0), padx=(10, 0))
-        self.listScrollbarY.grid(row=1, column=3, sticky=(tk.W, tk.N, tk.S), pady=5, padx=(0, 1))
-        self.listScrollbarX.grid(row=2, column=0, sticky=(tk.E, tk.W, tk.N), pady=(0, 5), columnspan=3, padx=(10, 0))
-        self.chooseDestinationEntry.grid(row=3, column=0, columnspan=2, sticky=(tk.W, tk.E), pady=5, padx=(10, 0))
-        self.chooseDestinationBtn.grid(row=3, column=2, pady=5, sticky=(tk.W, tk.E))
-        self.removeBtn.grid(row=4, column=0, sticky=(tk.W, tk.E), padx=(10, 0))
-        self.removeAllBtn.grid(row=4, column=1, sticky=(tk.W, tk.E))
-        self.convertBtn.grid(row=4, column=2, sticky=(tk.W, tk.E))
-        self.statusBar.grid(row=5, column=0, sticky=(tk.W, tk.E, tk.S), columnspan=3, padx=(10,0), pady=(10, 0))
+    def _update_controls(self, enable_essentials: bool, enable_all: bool | None = None):
+        self.remove_btn.setEnabled(enable_essentials)
+        self.remove_all_btn.setEnabled(enable_essentials)
+        self.convert_btn.setEnabled(enable_essentials)
+        if enable_all is not None:
+            self.dest_btn.setEnabled(enable_all)
+            self.select_btn.setEnabled(enable_all)
 
-    def appStart(self):
-        self.window.mainloop()
+    def _set_busy(self, busy: bool):
+        self.convert_btn.setEnabled(False if busy else bool(self._files))
+        self.remove_btn.setEnabled(not busy)
+        self.remove_all_btn.setEnabled(not busy)
+        self.dest_btn.setEnabled(not busy)
+        self.select_btn.setEnabled(not busy)
+        self.progress.setVisible(busy)
+        if busy:
+            # Indeterminate
+            self.progress.setRange(0, 0)
+        else:
+            self.progress.setRange(0, 1)
 
-    def PrintWindowInTheCenter(self):
-        windowHeight = 340
-        windowWidth = 650
-
-        screenWidth = self.window.winfo_screenwidth()
-        screenHeight = self.window.winfo_screenheight()
-
-        x_cordinate = int((screenWidth/2) - (windowWidth/2))
-        y_cordinate = int((screenHeight/2) - (windowHeight/2)) - 100 # slightly upper than center
-
-        self.window.geometry("{}x{}+{}+{}".format(windowWidth, windowHeight, x_cordinate, y_cordinate))
-
-    # ~~~~~~~~ UTILITY FUNCTIONS ~~~~~~~~
-
-    def removeAlreadySelectedFiles(self, appoTuple):
-
-        appoList = []
-
-        for k in range(len(appoTuple)):
-            appoList.append(appoTuple[k])
-
-        for i in range(len(self.fileList)):
-            for j in range(len(appoList)):
-                if appoList[j] == self.fileList[i]:
-                    appoList.pop(j)
-                    break
-        return appoList
-
-    def setStateButtons(self, state, howMany="essentials"):
-
-        if state == "off":
-            self.removeBtn.config(state=tk.DISABLED)
-            self.removeAllBtn.config(state=tk.DISABLED)
-            self.convertBtn.config(state=tk.DISABLED)
-            if howMany == "all":
-                self.chooseDestinationBtn.config(state=tk.DISABLED)
-                self.chooseFilesBtn.config(state=tk.DISABLED)
-        
-        elif state == "on":
-            self.removeBtn.config(state=tk.ACTIVE)
-            self.removeAllBtn.config(state=tk.ACTIVE)
-            self.convertBtn.config(state=tk.ACTIVE)
-            if howMany == "all":
-                self.chooseDestinationBtn.config(state=tk.ACTIVE)
-                self.chooseFilesBtn.config(state=tk.ACTIVE)
+    def _default_desktop(self) -> str:
+        if platform.system() in ('Darwin', 'Linux'):
+            return os.path.join(os.path.expanduser('~'), 'Desktop')
+        elif platform.system() == 'Windows':
+            return os.path.join(os.environ.get('USERPROFILE', os.path.expanduser('~')), 'Desktop')
+        return os.path.expanduser('~')

@@ -6,11 +6,12 @@ A simple Python application to convert **WebP** images into **JPG**, **PNG**, or
 * **PNG** for images with transparency
 * **GIF** for animated images
 
-The program features a graphical user interface built with **Tkinter**.
+The program features a graphical user interface built with **PyQt6**.
 
 ## Features
 
 * Automatic format detection (JPG, PNG, GIF)
+* Drag & drop support
 * Simple and user-friendly GUI
 * Easy installation and usage
 * Free and open-source (GPL-3.0 License)
