@@ -19,6 +19,7 @@ DATA_FILES = [
 
 OPTIONS = {
     'iconfile': "assets/icon.icns",
+    'argv_emulation': True,
     'plist':{
         'CFBundleName': "From Webp Converter",
         'CFBundleVersion': "V1.0.1",
@@ -38,6 +39,8 @@ OPTIONS = {
         'PyQt6.QtWidgets',
         'PyQt6.sip',
     ],
+    # Bundle essential Qt plugins (prevents missing platform/imageformat at runtime)
+    'qt_plugins': ['platforms', 'styles', 'imageformats', 'iconengines'],
 }
 
 setup(
