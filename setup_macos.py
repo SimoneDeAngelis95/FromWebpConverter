@@ -24,7 +24,7 @@ OPTIONS = {
         'CFBundleName': "From Webp Converter",
         'CFBundleVersion': "V1.0.1",
         'CFBundleShortVersionString': "V1.0.1", 
-        'NSHumanReadableCopyright': '© 2023-2025 Made with Love by Simone De Angelis',
+        'NSHumanReadableCopyright': '© 2023-2026 Made with Love by Simone De Angelis',
         'CFBundleIdentifier': 'com.simonedeamelis.fromwebpconverter',                  # Unique identifier for the app
         'LSApplicationCategoryType': 'public.app-category.utilities',                  # Application category
         'NSHighResolutionCapable': True,                                               # Support for high-resolution displays

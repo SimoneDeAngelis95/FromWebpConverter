@@ -9,7 +9,6 @@ from MainWindow import MainWindow
 def main():
     app = QApplication(sys.argv)
 
-    # Preview: enable a light, professional palette with red accent
     try:
         app.setStyle(QStyleFactory.create('Fusion'))
         light = QPalette()

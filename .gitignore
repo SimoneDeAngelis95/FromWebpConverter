@@ -3,3 +3,4 @@ __venv__
 .DS_Store
 build
 dist
+.eggs
