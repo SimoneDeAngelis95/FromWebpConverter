@@ -11,7 +11,6 @@ This setup works with macOS silicon and intel architectures.
 
 from setuptools import setup
 
-
 APP = ['src/main.py']
 DATA_FILES = [
     "assets/icon.icns"
@@ -22,8 +21,8 @@ OPTIONS = {
     'argv_emulation': True,
     'plist':{
         'CFBundleName': "From Webp Converter",
-        'CFBundleVersion': "V1.0.1",
-        'CFBundleShortVersionString': "V1.0.1", 
+        'CFBundleVersion': "V1.0.2",
+        'CFBundleShortVersionString': "V1.0.2", 
         'NSHumanReadableCopyright': '© 2023-2026 Made with Love by Simone De Angelis',
         'CFBundleIdentifier': 'com.simonedeamelis.fromwebpconverter',                  # Unique identifier for the app
         'LSApplicationCategoryType': 'public.app-category.utilities',                  # Application category

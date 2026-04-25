@@ -5,17 +5,17 @@ import os
 def convertFile(image_path, pathToSave):
     """Convert a .webp image to GIF (if animated), PNG (if has alpha), or JPG otherwise."""
     img = Image.open(image_path)
-    name = os.path.join(pathToSave, extractFileName(image_path))
+    base_name = os.path.join(pathToSave, extractFileName(image_path))
 
     try:
         if isGif(img):
-            name = name + ".gif"
+            name = getAvailableFilePath(base_name, ".gif")
             _save_as_gif(img, name)
         elif hasAlphaChannel(img):
-            name = name + ".png"
+            name = getAvailableFilePath(base_name, ".png")
             img.save(name, format='PNG', lossless=True)
         else:
-            name = name + ".jpg"
+            name = getAvailableFilePath(base_name, ".jpg")
             img.save(name, format='JPEG', quality=95)
     finally:
         img.close()
@@ -60,6 +60,19 @@ def extractFileName(filePath):
     base = os.path.basename(filePath)
     name, _ = os.path.splitext(base)
     return name
+
+
+def getAvailableFilePath(basePath, extension):
+    file_path = basePath + extension
+    if not os.path.exists(file_path):
+        return file_path
+
+    counter = 1
+    while True:
+        file_path = f"{basePath}({counter}){extension}"
+        if not os.path.exists(file_path):
+            return file_path
+        counter += 1
 
 
 def hasAlphaChannel(img):

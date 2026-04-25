@@ -18,6 +18,7 @@ from PyQt6.QtWidgets import (
     QStatusBar,
 )
 from conversionFn import convertFile
+import globalVariables as GV
 
 
 class DropListWidget(QListWidget):
@@ -79,7 +80,7 @@ class ConverterWorker(QObject):
 class MainWindow(QMainWindow):
     def __init__(self):
         super().__init__()
-        self.setWindowTitle("From Webp Converter V1.0.1")
+        self.setWindowTitle(GV.APP_NAME + " " + GV.APP_VERSION)
         self.setMinimumSize(650, 340)
 
         # Try set app icon if available (Qt uses .icns on macOS)
@@ -92,7 +93,7 @@ class MainWindow(QMainWindow):
         self._setup_connections()
 
         # Default destination path
-        self.dest_edit.setText(self._default_desktop())
+        self.dest_edit.setText(GV.DEFAULT_PATH)
         self._update_controls(enable_essentials=False, enable_all=True)
 
     def _setup_ui(self):
@@ -136,7 +137,7 @@ class MainWindow(QMainWindow):
 
         status = QStatusBar(self)
         self.setStatusBar(status)
-        self.statusBar().showMessage('From Webp Converter')
+        self.statusBar().showMessage(GV.APP_NAME + ' ' + GV.APP_VERSION)
 
     def _setup_connections(self):
         self.select_btn.clicked.connect(self._select_files)
@@ -148,7 +149,7 @@ class MainWindow(QMainWindow):
 
     # UI actions
     def _select_files(self):
-        files, _ = QFileDialog.getOpenFileNames(self, 'Choose files', self._default_desktop(),
+        files, _ = QFileDialog.getOpenFileNames(self, 'Choose files', GV.DEFAULT_PATH,
                                                 'WebP files (*.webp);;All files (*.*)')
         if not files:
             return
@@ -178,7 +179,7 @@ class MainWindow(QMainWindow):
         self._update_controls(enable_essentials=False)
 
     def _select_dest(self):
-        current = self.dest_edit.text() or self._default_desktop()
+        current = self.dest_edit.text() or GV.DEFAULT_PATH
         chosen = QFileDialog.getExistingDirectory(self, 'Select destination', current)
         if chosen:
             self.dest_edit.setText(chosen)
@@ -281,10 +282,3 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, 0)
         else:
             self.progress.setRange(0, 1)
-
-    def _default_desktop(self) -> str:
-        if platform.system() in ('Darwin', 'Linux'):
-            return os.path.join(os.path.expanduser('~'), 'Desktop')
-        elif platform.system() == 'Windows':
-            return os.path.join(os.environ.get('USERPROFILE', os.path.expanduser('~')), 'Desktop')
-        return os.path.expanduser('~')
