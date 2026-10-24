@@ -2,12 +2,19 @@ import sys
 import os
 
 from PyQt6.QtWidgets import QApplication, QStyleFactory
-from PyQt6.QtGui import QPalette, QColor
+from PyQt6.QtGui import QPalette, QColor, QIcon
 from MainWindow import MainWindow
+from resources import asset_path
+import platform
+import globalVariables as GV
 
 
 def main():
     app = QApplication(sys.argv)
+    app.setOrganizationName("SimoneDeAngelis95")
+    app.setApplicationName("FromWebpConverter")
+    app.setApplicationVersion(GV.APP_VERSION)
+    app.setWindowIcon(QIcon(asset_path("icon.icns" if platform.system() == "Darwin" else "icon.ico")))
 
     try:
         app.setStyle(QStyleFactory.create('Fusion'))

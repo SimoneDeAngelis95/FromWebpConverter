@@ -4,3 +4,6 @@ __venv__
 build
 dist
 .eggs
+.pytest_cache/
+.venv/
+*.egg-info/

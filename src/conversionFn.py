@@ -4,7 +4,7 @@ import os
 
 def convertFile(image_path, pathToSave):
     """Convert a .webp image to GIF (if animated), PNG (if has alpha), or JPG otherwise."""
-    img = Image.open(image_path)
+    img = Image.open(image_path, formats=["WEBP"])
     base_name = os.path.join(pathToSave, extractFileName(image_path))
 
     try:
@@ -29,7 +29,7 @@ def _save_as_gif(img, out_path):
     try:
         for frame in ImageSequence.Iterator(img):
             rgba = frame.convert('RGBA')
-            pal = rgba.convert('P', palette=Image.ADAPTIVE, colors=255)
+            pal = rgba.convert('P', palette=Image.Palette.ADAPTIVE, colors=255)
             frames.append(pal)
             durations.append(frame.info.get('duration', img.info.get('duration', 100)))
 

@@ -10,10 +10,12 @@ This setup works with macOS silicon and intel architectures.
 """
 
 from setuptools import setup
+import runpy
+VERSION = runpy.run_path("src/globalVariables.py")["APP_VERSION"]
 
 APP = ['src/main.py']
 DATA_FILES = [
-    "assets/icon.icns"
+    ("assets", ["assets/icon.icns", "assets/icon.ico"])
 ]
 
 OPTIONS = {
@@ -21,8 +23,8 @@ OPTIONS = {
     'argv_emulation': True,
     'plist':{
         'CFBundleName': "From Webp Converter",
-        'CFBundleVersion': "V1.0.2",
-        'CFBundleShortVersionString': "V1.0.2", 
+        'CFBundleVersion': VERSION,
+        'CFBundleShortVersionString': VERSION,
         'NSHumanReadableCopyright': '© 2023-2026 Made with Love by Simone De Angelis',
         'CFBundleIdentifier': 'com.simonedeamelis.fromwebpconverter',                  # Unique identifier for the app
         'LSApplicationCategoryType': 'public.app-category.utilities',                  # Application category
@@ -30,7 +32,7 @@ OPTIONS = {
     },
     'optimize': 2,                                                                     # Python bytecode optimization level
     # Ensure Qt and PIL modules are collected
-    'packages': ['PIL', 'PyQt6'],
+    'packages': ['PIL', 'PyQt6', 'uppie', 'requests', 'certifi'],
     'includes': [
         'PyQt6',
         'PyQt6.QtCore',
