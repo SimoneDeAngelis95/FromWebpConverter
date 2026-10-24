@@ -85,3 +85,18 @@ from that same approved image. The original FWC composition remains recognizable
 Generation instruction: preserve the original FWC letters, frame, dark backdrop,
 texture and shadows; change red elements to electric neon blue with restrained
 cyan highlights. The earlier red conversion-arrow proposal was rejected.
+
+## Conversion and queue regression fixes
+
+While conversion is running, file drops are disabled and queue mutations and
+repeated conversion starts are rejected. A file selected through overlapping
+folder/file drops is queued once, using canonical paths for duplicate detection.
+
+Animated GIF output reserves a transparent palette index and clears each frame
+before displaying the next one. GIF supports binary transparency: alpha below
+128 becomes transparent and higher alpha becomes opaque. WebP's total play count
+is translated to GIF's repeat count (once means no loop extension; zero remains
+infinite). See the [WebP animation specification](https://developers.google.com/speed/webp/docs/riff_container#animation).
+GIF encoding failures now propagate as conversion errors instead of silently
+producing a still image. Regression tests cover these cases, including moving
+transparent content without trails.

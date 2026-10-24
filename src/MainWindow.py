@@ -95,6 +95,7 @@ class MainWindow(QMainWindow):
         self.update_task = None
         self.update_timer = QTimer(self)
         self.update_timer.timeout.connect(self._update_download_progress)
+        self._busy = False
         self._files = []
         self._setup_ui()
         self._setup_connections()
@@ -161,14 +162,14 @@ class MainWindow(QMainWindow):
 
     # UI actions
     def _select_files(self):
+        if self._busy:
+            return
         files, _ = QFileDialog.getOpenFileNames(self, 'Choose files', GV.DEFAULT_PATH,
                                                 'WebP files (*.webp);;All files (*.*)')
         if not files:
             return
 
-        # Filter: unique + only .webp (case-insensitive)
-        existing = set(self._files)
-        to_add = [f for f in files if f.lower().endswith('.webp') and f not in existing]
+        to_add = self._unique_webp_paths(files)
         if not to_add:
             return
         self._files.extend(to_add)
@@ -197,7 +198,9 @@ class MainWindow(QMainWindow):
             self.dest_edit.setText(chosen)
 
     def _start_conversion(self):
-        if not self._files:
+        if not self._files or self._busy or (
+                getattr(self, 'conversion_thread', None) is not None
+                and self.conversion_thread.isRunning()):
             return
         self._set_busy(True)
         self.statusBar().setStyleSheet('color: black;')
@@ -217,22 +220,18 @@ class MainWindow(QMainWindow):
         self.conversion_thread.start()
 
     def _on_files_dropped(self, paths: list[str]):
-        # Filter dropped files: unique + .webp only
-        existing = set(self._files)
-        to_add = []
-        for p in paths:
-            if not p:
+        if self._busy:
+            return
+        candidates = []
+        for path in paths:
+            if not path:
                 continue
-            if os.path.isdir(p):
-                # Optionally, collect .webp from the folder
-                for root, _, files in os.walk(p):
-                    for f in files:
-                        full = os.path.join(root, f)
-                        if full.lower().endswith('.webp') and full not in existing:
-                            to_add.append(full)
+            if os.path.isdir(path):
+                for root, _, files in os.walk(path):
+                    candidates.extend(os.path.join(root, name) for name in files)
             else:
-                if p.lower().endswith('.webp') and p not in existing:
-                    to_add.append(p)
+                candidates.append(path)
+        to_add = self._unique_webp_paths(candidates)
         if not to_add:
             return
         self._files.extend(to_add)
@@ -270,6 +269,19 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg)
 
     # Helpers
+    def _unique_webp_paths(self, paths):
+        # Canonical keys also catch overlaps between a dropped folder and file.
+        def key(path):
+            return os.path.normcase(os.path.realpath(path))
+        seen = {key(path) for path in self._files}
+        result = []
+        for path in paths:
+            identity = key(path)
+            if path.lower().endswith('.webp') and identity not in seen:
+                seen.add(identity)
+                result.append(path)
+        return result
+
     def _refresh_list(self):
         self.list_widget.clear()
         for path in self._files:
@@ -285,7 +297,9 @@ class MainWindow(QMainWindow):
             self.select_btn.setEnabled(enable_all)
 
     def _set_busy(self, busy: bool):
-        self.update_btn.setEnabled(not busy)
+        self._busy = busy
+        self.list_widget.setAcceptDrops(not busy)
+        self.update_btn.setEnabled(not busy and self.update_task is None)
         self.convert_btn.setEnabled(False if busy else bool(self._files))
         self.remove_btn.setEnabled(not busy)
         self.remove_all_btn.setEnabled(not busy)
@@ -322,7 +336,7 @@ class MainWindow(QMainWindow):
         self.update_timer.stop()
         self.update_task.deleteLater()
         self.update_task = None
-        self.update_btn.setEnabled(True)
+        self.update_btn.setEnabled(not self._busy)
         action, result = self._update_result
         if action == 'error':
             self.statusBar().showMessage(result)

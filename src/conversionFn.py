@@ -25,28 +25,39 @@ def _save_as_gif(img, out_path):
     """Save an animated image as GIF with frame durations preserved when possible."""
     frames = []
     durations = []
+    loop = img.info.get('loop', 1)
 
     try:
         for frame in ImageSequence.Iterator(img):
             rgba = frame.convert('RGBA')
-            pal = rgba.convert('P', palette=Image.Palette.ADAPTIVE, colors=255)
+            # GIF supports binary transparency only. Reserve index 255 so
+            # transparent pixels never replace a visible palette colour.
+            pal = rgba.convert('RGB').quantize(colors=255)
+            palette = pal.getpalette()
+            pal.putpalette(palette[:765] + [0] * (768 - len(palette[:765])))
+            mask = rgba.getchannel('A').point(lambda alpha: 255 if alpha < 128 else 0)
+            pal.paste(255, mask=mask)
+            pal.info.clear()  # Do not inherit WebP loop/background metadata.
             frames.append(pal)
             durations.append(frame.info.get('duration', img.info.get('duration', 100)))
 
-        base = frames[0]
-        append = frames[1:] if len(frames) > 1 else []
-        base.save(
+        # WebP counts total plays; GIF counts repeats after the first play.
+        options = {} if loop == 1 else {'loop': 0 if loop == 0 else loop - 1}
+        frames[0].save(
             out_path,
             save_all=True,
-            append_images=append,
+            append_images=frames[1:],
             format='GIF',
-            loop=0,
-            duration=durations if durations else 100,
+            duration=durations,
             disposal=2,
+            transparency=255,
+            background=255,
+            optimize=False,
+            **options,
         )
-    except Exception:
-        # Fallback: save first frame only
-        img.convert('RGB').save(out_path, format='GIF')
+    finally:
+        for frame in frames:
+            frame.close()
 
 
 def isGif(img):
