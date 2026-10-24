@@ -13,9 +13,12 @@ References:
 - https://pillow.readthedocs.io/en/stable/releasenotes/13.0.0.html
 - https://github.com/python-pillow/Pillow/security/advisories/GHSA-5x8w-8jj5-q52h
 
-Repository Dependabot alert status must be checked after merging: public GitHub
-API calls cannot read the authenticated alert list. Updating this branch does
-not itself close alerts on the default branch. Weekly pip/Actions update checks
+The authenticated Dependabot API was checked on 2026-10-24: 54 open alerts
+(5 critical, 33 high, 16 moderate), all for Pillow in requirements.txt.
+Pillow 13.0.0 is outside every reported vulnerable version range; this was
+verified using packaging.specifiers against all 54 alert records. Updating this
+branch does not itself close alerts on the default branch; confirm closure
+after an approved merge. Weekly pip/Actions update checks
 are configured in `.github/dependabot.yml`.
 
 ## Uppie integration
