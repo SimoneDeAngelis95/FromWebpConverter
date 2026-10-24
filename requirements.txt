@@ -1,6 +1,6 @@
 pillow==13.0.0
 PyQt6==6.9.1
-PyQt6-Qt6==6.9.2
+PyQt6-Qt6==6.11.2
 PyQt6_sip==13.11.1
 
 uppie @ git+https://github.com/SimoneDeAngelis95/uppie.git@eb602c8f29be8e12f7b89eb3ba8ff8d09a6a3d14
