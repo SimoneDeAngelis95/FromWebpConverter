@@ -2,7 +2,7 @@ import platform
 import os
 
 APP_NAME = "From Webp Converter"
-APP_VERSION = "1.0.2"
+APP_VERSION = "1.0.3"
 
 
 if platform.system() in ('Darwin', 'Linux'):

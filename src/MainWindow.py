@@ -2,7 +2,7 @@ import os
 import sys
 import platform
 
-from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread
+from PyQt6.QtCore import Qt, QObject, pyqtSignal, QThread, QTimer
 from PyQt6.QtGui import QIcon, QColor
 from PyQt6.QtWidgets import (
     QMainWindow,
@@ -16,9 +16,12 @@ from PyQt6.QtWidgets import (
     QLineEdit,
     QProgressBar,
     QStatusBar,
+    QMessageBox,
 )
 from conversionFn import convertFile
 import globalVariables as GV
+from updates import UpdateService, UpdateTask
+from resources import asset_path
 
 
 class DropListWidget(QListWidget):
@@ -84,10 +87,15 @@ class MainWindow(QMainWindow):
         self.setMinimumSize(650, 340)
 
         # Try set app icon if available (Qt uses .icns on macOS)
-        icon_path = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'assets', 'icon.icns')
+        icon_path = asset_path('icon.icns' if platform.system() == 'Darwin' else 'icon.ico')
         if os.path.exists(icon_path):
             self.setWindowIcon(QIcon(icon_path))
 
+        self.update_service = UpdateService()
+        self.update_task = None
+        self.update_timer = QTimer(self)
+        self.update_timer.timeout.connect(self._update_download_progress)
+        self._busy = False
         self._files = []
         self._setup_ui()
         self._setup_connections()
@@ -95,11 +103,15 @@ class MainWindow(QMainWindow):
         # Default destination path
         self.dest_edit.setText(GV.DEFAULT_PATH)
         self._update_controls(enable_essentials=False, enable_all=True)
+        if getattr(sys, "frozen", False):
+            QTimer.singleShot(1500, lambda: self._run_update("check", automatic=True))
 
     def _setup_ui(self):
         central = QWidget(self)
         self.setCentralWidget(central)
 
+        self.update_btn = QPushButton("Check for updates")
+        self.update_btn.clicked.connect(lambda: self._run_update("check"))
         self.select_btn = QPushButton('Select Files')
         self.list_widget = DropListWidget()
 
@@ -117,6 +129,7 @@ class MainWindow(QMainWindow):
         self.progress.setVisible(False)
 
         layout = QVBoxLayout()
+        layout.addWidget(self.update_btn)
         layout.addWidget(self.select_btn)
         layout.addWidget(self.list_widget)
 
@@ -149,14 +162,14 @@ class MainWindow(QMainWindow):
 
     # UI actions
     def _select_files(self):
+        if self._busy:
+            return
         files, _ = QFileDialog.getOpenFileNames(self, 'Choose files', GV.DEFAULT_PATH,
                                                 'WebP files (*.webp);;All files (*.*)')
         if not files:
             return
 
-        # Filter: unique + only .webp (case-insensitive)
-        existing = set(self._files)
-        to_add = [f for f in files if f.lower().endswith('.webp') and f not in existing]
+        to_add = self._unique_webp_paths(files)
         if not to_add:
             return
         self._files.extend(to_add)
@@ -185,40 +198,40 @@ class MainWindow(QMainWindow):
             self.dest_edit.setText(chosen)
 
     def _start_conversion(self):
-        if not self._files:
+        if not self._files or self._busy or (
+                getattr(self, 'conversion_thread', None) is not None
+                and self.conversion_thread.isRunning()):
             return
         self._set_busy(True)
         self.statusBar().setStyleSheet('color: black;')
         self.statusBar().showMessage('Starting conversion...')
 
-        self.thread = QThread(self)
+        self.conversion_thread = QThread(self)
         self.worker = ConverterWorker(self._files.copy(), self.dest_edit.text())
-        self.worker.moveToThread(self.thread)
-        self.thread.started.connect(self.worker.run)
+        self.worker.moveToThread(self.conversion_thread)
+        self.conversion_thread.started.connect(self.worker.run)
         self.worker.progress.connect(self._on_progress)
         self.worker.item_status.connect(self._on_item_status)
         self.worker.finished.connect(self._on_finished)
-        self.worker.finished.connect(self.thread.quit)
-        self.thread.finished.connect(self.thread.deleteLater)
-        self.thread.start()
+        self.worker.finished.connect(self.conversion_thread.quit)
+        self.worker.finished.connect(self.worker.deleteLater)
+        self.conversion_thread.finished.connect(lambda: setattr(self, "conversion_thread", None))
+        self.conversion_thread.finished.connect(self.conversion_thread.deleteLater)
+        self.conversion_thread.start()
 
     def _on_files_dropped(self, paths: list[str]):
-        # Filter dropped files: unique + .webp only
-        existing = set(self._files)
-        to_add = []
-        for p in paths:
-            if not p:
+        if self._busy:
+            return
+        candidates = []
+        for path in paths:
+            if not path:
                 continue
-            if os.path.isdir(p):
-                # Optionally, collect .webp from the folder
-                for root, _, files in os.walk(p):
-                    for f in files:
-                        full = os.path.join(root, f)
-                        if full.lower().endswith('.webp') and full not in existing:
-                            to_add.append(full)
+            if os.path.isdir(path):
+                for root, _, files in os.walk(path):
+                    candidates.extend(os.path.join(root, name) for name in files)
             else:
-                if p.lower().endswith('.webp') and p not in existing:
-                    to_add.append(p)
+                candidates.append(path)
+        to_add = self._unique_webp_paths(candidates)
         if not to_add:
             return
         self._files.extend(to_add)
@@ -256,6 +269,19 @@ class MainWindow(QMainWindow):
         self.statusBar().showMessage(msg)
 
     # Helpers
+    def _unique_webp_paths(self, paths):
+        # Canonical keys also catch overlaps between a dropped folder and file.
+        def key(path):
+            return os.path.normcase(os.path.realpath(path))
+        seen = {key(path) for path in self._files}
+        result = []
+        for path in paths:
+            identity = key(path)
+            if path.lower().endswith('.webp') and identity not in seen:
+                seen.add(identity)
+                result.append(path)
+        return result
+
     def _refresh_list(self):
         self.list_widget.clear()
         for path in self._files:
@@ -271,6 +297,9 @@ class MainWindow(QMainWindow):
             self.select_btn.setEnabled(enable_all)
 
     def _set_busy(self, busy: bool):
+        self._busy = busy
+        self.list_widget.setAcceptDrops(not busy)
+        self.update_btn.setEnabled(not busy and self.update_task is None)
         self.convert_btn.setEnabled(False if busy else bool(self._files))
         self.remove_btn.setEnabled(not busy)
         self.remove_all_btn.setEnabled(not busy)
@@ -282,3 +311,60 @@ class MainWindow(QMainWindow):
             self.progress.setRange(0, 0)
         else:
             self.progress.setRange(0, 1)
+
+    def _run_update(self, action, automatic=False):
+        if self.update_task is not None or (getattr(self, 'conversion_thread', None) is not None and self.conversion_thread.isRunning()):
+            return
+        self._automatic_check = automatic
+        self.update_btn.setEnabled(False)
+        self.statusBar().showMessage({'check': 'Checking GitHub...', 'download': 'Downloading update...',
+                                      'install': 'Opening installer...'}[action])
+        self.update_task = UpdateTask(self.update_service, action, self)
+        self._update_result = None
+        self.update_task.completed.connect(lambda a, r: setattr(self, '_update_result', (a, r)))
+        self.update_task.failed.connect(lambda e: setattr(self, '_update_result', ('error', e)))
+        self.update_task.finished.connect(self._update_done)
+        if action == 'download':
+            self.update_timer.start(200)
+        self.update_task.start()
+
+    def _update_download_progress(self):
+        percent = self.update_service.client.get_progress_percentage()
+        self.statusBar().showMessage(f'Downloading update... {percent}%')
+
+    def _update_done(self):
+        self.update_timer.stop()
+        self.update_task.deleteLater()
+        self.update_task = None
+        self.update_btn.setEnabled(not self._busy)
+        action, result = self._update_result
+        if action == 'error':
+            self.statusBar().showMessage(result)
+            if not self._automatic_check:
+                QMessageBox.warning(self, 'Update', result)
+        elif action == 'check':
+            if not result:
+                self.statusBar().showMessage('No newer compatible release available.')
+                return
+            version = self.update_service.client.latest_release.get('tag_name', '')
+            if QMessageBox.question(self, 'Update available',
+                    f'Version {version} is available. Download it?',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                self._run_update('download')
+        elif action == 'download':
+            self.statusBar().showMessage('Update downloaded.')
+            if QMessageBox.question(self, 'Update downloaded',
+                    'Open the installer now? Close the converter before completing installation.',
+                    QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+                    QMessageBox.StandardButton.No) == QMessageBox.StandardButton.Yes:
+                self._run_update('install')
+        elif action == 'install':
+            self.statusBar().showMessage('Installer opened. You can close the converter.')
+
+    def closeEvent(self, event):
+        if self.update_task is not None or (getattr(self, 'conversion_thread', None) is not None and self.conversion_thread.isRunning()):
+            self.statusBar().showMessage('Please wait for the current operation to finish before closing.')
+            event.ignore()
+            return
+        super().closeEvent(event)
