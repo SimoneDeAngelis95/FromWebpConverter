@@ -61,7 +61,7 @@ jobs:
           $uninstaller = Join-Path (Split-Path $installedApp) 'unins000.exe'
           $uninstall = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
           if ($uninstall.ExitCode -ne 0) { throw 'Uninstaller failed' }
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: windows-x64-installer
           path: dist/installer/*-Setup.exe
