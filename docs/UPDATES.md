@@ -105,3 +105,7 @@ transparent content without trails.
 The macOS padding edit was made with imagegen using the approved blue icon as
 reference: preserve FWC, colors and rounded frame; reduce and center the artwork
 on a transparent square canvas. The PNG and ICNS exports are 1024 × 1024.
+
+Dock screenshot feedback showed that the first padded variant was too small.
+The macOS artwork now uses narrower margins, with the visible tile occupying
+roughly 90% of the canvas, between the original full-bleed and padded variants.
