@@ -53,7 +53,10 @@ a stable AppId for upgrades. `APP_VERSION` in `src/globalVariables.py` supplies
 the installer version and the macOS bundle version.
 
 The workflow runs tests on Linux, Windows and macOS with Python 3.11 and 3.13,
-then uploads a Windows installer artifact. It never creates a GitHub release.
+then builds, silently installs, launches for eight seconds and uninstalls the
+Windows application before uploading the installer artifact. This smoke test
+detects packaging/startup failures; it does not prove upgrade or interactive
+conversion behavior. It never creates a GitHub release.
 Download the artifact from the PR Actions run to test installation. It is
 unsigned; code signing requires a separate certificate/release decision.
 

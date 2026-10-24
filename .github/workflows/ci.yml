@@ -44,6 +44,23 @@ jobs:
           $appVersion = python -c "import sys; sys.path.insert(0, 'src'); import globalVariables; print(globalVariables.APP_VERSION)"
           & "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "/DAppVersion=$appVersion" packaging/windows.iss
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+      - name: Install and launch smoke test
+        shell: pwsh
+        env:
+          QT_QPA_PLATFORM: offscreen
+        run: |
+          $installer = Get-ChildItem dist/installer/*-Setup.exe | Select-Object -First 1
+          $install = Start-Process $installer.FullName -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($install.ExitCode -ne 0) { throw "Installer failed: $($install.ExitCode)" }
+          $installedApp = Join-Path $env:LOCALAPPDATA 'Programs/FromWebpConverter/FromWebpConverter.exe'
+          if (!(Test-Path $installedApp)) { throw 'Installed executable missing' }
+          $appProcess = Start-Process $installedApp -PassThru
+          Start-Sleep -Seconds 8
+          if ($appProcess.HasExited) { throw "Application exited unexpectedly: $($appProcess.ExitCode)" }
+          Stop-Process -Id $appProcess.Id
+          $uninstaller = Join-Path (Split-Path $installedApp) 'unins000.exe'
+          $uninstall = Start-Process $uninstaller -ArgumentList '/VERYSILENT', '/SUPPRESSMSGBOXES', '/NORESTART' -Wait -PassThru
+          if ($uninstall.ExitCode -ne 0) { throw 'Uninstaller failed' }
       - uses: actions/upload-artifact@v4
         with:
           name: windows-x64-installer
