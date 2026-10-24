@@ -80,8 +80,9 @@ naming a DMG universal. This change does not claim a tested universal build.
 ## Icon
 
 The existing FWC monogram was recolored to neon blue with imagegen after user
-review and approval. `assets/icon.png` is the source; ICO and ICNS are generated
-from that same approved image. The original FWC composition remains recognizable.
+review and approval. `assets/icon.png` is the Windows source used for ICO. The macOS variant
+`assets/icon-macos.png` adds transparent space around the FWC design to reduce
+its visual footprint in the Dock; `assets/icon.icns` is exported from that variant. The original FWC composition remains recognizable.
 Generation instruction: preserve the original FWC letters, frame, dark backdrop,
 texture and shadows; change red elements to electric neon blue with restrained
 cyan highlights. The earlier red conversion-arrow proposal was rejected.
@@ -100,3 +101,7 @@ infinite). See the [WebP animation specification](https://developers.google.com/
 GIF encoding failures now propagate as conversion errors instead of silently
 producing a still image. Regression tests cover these cases, including moving
 transparent content without trails.
+
+The macOS padding edit was made with imagegen using the approved blue icon as
+reference: preserve FWC, colors and rounded frame; reduce and center the artwork
+on a transparent square canvas. The PNG and ICNS exports are 1024 × 1024.
